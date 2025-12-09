@@ -1,57 +1,69 @@
 pipeline {
     agent any
 
-    // Эта часть — почти как в лабораторной, но с fallback-установкой Go
     environment {
-        // Сначала пробуем путь из лабораторной
-        PATH = "/var/jenkins_home/go/bin:${env.PATH}"
+        // Устанавливаем переменные для Go
+        GO_INSTALL_DIR = "/usr/local/go"
+        PATH = "$GO_INSTALL_DIR/bin:${env.PATH}"
     }
 
     stages {
-        stage('Prepare Go') {
+        stage('Setup Go') {
             steps {
                 sh '''
-                    # Если Go нет по пути из лабы — ставим сами
+                    # Устанавливаем Go если нет
                     if ! command -v go >/dev/null 2>&1; then
-                        echo "Go не найден в /var/jenkins_home/go — устанавливаем в /usr/local/go"
-                        rm -rf /usr/local/go
-                        wget -q https://go.dev/dl/go1.22.8.linux-amd64.tar.gz -O /tmp/go.tar.gz || \
-                        curl -k -L https://go.dev/dl/go1.22.8.linux-amd64.tar.gz -o /tmp/go.tar.gz
-                        tar -C /usr/local -xzf /tmp/go.tar.gz
-                        export PATH="/usr/local/go/bin:$PATH"
+                        echo "Установка Go 1.22.8..."
+                        
+                        # Создаем временную директорию с правами
+                        mkdir -p /tmp/go-install
+                        cd /tmp/go-install
+                        
+                        # Скачиваем Go
+                        wget -q https://go.dev/dl/go1.22.8.linux-amd64.tar.gz || \
+                        curl -L https://go.dev/dl/go1.22.8.linux-amd64.tar.gz -o go.tar.gz
+                        
+                        # Распаковываем ВО временную директорию
+                        tar -xzf go*.tar.gz
+                        
+                        # Копируем только нужное
+                        mkdir -p /usr/local
+                        cp -r go /usr/local/
+                        
+                        # Очистка
+                        rm -rf /tmp/go-install
                     fi
+                    
+                    # Проверяем
                     go version
                 '''
             }
         }
 
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Unit Tests') {
             steps {
-                sh 'go test -v -run="TestHandler|TestHandler2"'
+                sh 'go test -v -run="TestHandler|TestHandler2" ./...'
             }
         }
 
         stage('Integration Test') {
             steps {
-                sh 'go test -v -run="TestIntegration"'
+                sh 'go test -v -run="TestIntegration" ./...'
             }
         }
 
-        // Эти стадии — точно как в лабораторной, просто для красоты
-        stage('Build (опционально)') {
-            when { branch 'main' }
-            steps {
-                sh 'go build -o app main.go'
-            }
-        }
-
-        stage('Docker Build & Deploy (опционально)') {
+        stage('Build') {
             when { branch 'main' }
             steps {
                 sh '''
-                    docker build -t test:${GIT_COMMIT.take(7)} .
-                    docker rm -f test || true
-                    docker run -d -p 9000:8080 --name test test:${GIT_COMMIT.take(7)} || true
+                    go build -o app main.go
+                    ls -la
                 '''
             }
         }
@@ -59,8 +71,10 @@ pipeline {
 
     post {
         success {
-            echo "Интеграционное тестирование успешно пройдено!"
-            echo "Оба сервиса отвечают корректно"
+            echo "Все тесты пройдены успешно!"
+        }
+        failure {
+            echo "Сборка завершилась с ошибкой"
         }
     }
 }
