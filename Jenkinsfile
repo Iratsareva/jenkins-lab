@@ -2,37 +2,21 @@ pipeline {
     agent any
 
     stages {
-        stage('Install Go') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    if ! command -v go >/dev/null 2>&1; then
-                        wget -q https://go.dev/dl/go1.22.8.linux-amd64.tar.gz
-                        tar -C /tmp -xzf go1.22.8.linux-amd64.tar.gz
-                        mv /tmp/go /usr/local/go
-                    fi
-                    /usr/local/go/bin/go version
-                '''
+                checkout scm
             }
         }
 
-        stage('Test') {
-            environment {
-                PATH = "/usr/local/go/bin:${env.PATH}"
-            }
+        stage('Tests') {
             steps {
-                sh 'go test -v ./...'
-
-                // Или отдельно:
-                // sh 'go test -v -run TestHandler'
-                // sh 'go test -v -run TestIntegration'
+                sh 'go version'                     // покажет, что Go уже есть
+                sh 'go test -v ./...'               // запустит ВСЕ тесты, включая интеграционный
             }
         }
 
         stage('Build & Deploy (опционально)') {
             when { branch 'main' }
-            environment {
-                PATH = "/usr/local/go/bin:${env.PATH}"
-            }
             steps {
                 sh '''
                     go build -o app main.go
@@ -41,6 +25,12 @@ pipeline {
                     docker run -d -p 9000:8080 --name jenkins-lab jenkins-lab:${GIT_COMMIT.take(7)}
                 '''
             }
+        }
+    }
+
+    post {
+        always {
+            echo "Билд завершён. Интеграционный тест должен быть в логе выше ↑"
         }
     }
 }
