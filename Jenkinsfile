@@ -45,32 +45,7 @@ pipeline {
                     echo "Запуск интеграционного тестирования..."
                     go test -v -run="TestIntegration" .
                     echo "Интеграционное тестирование завершено"
-                '''
-            }
-        }
-
-        stage('Создание Dockerfile') {
-            steps {
-                sh '''
-                    echo "Создание Dockerfile..."
-                    
-                    cat > Dockerfile << 'EOF'
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go test -v -run="TestIntegration" .
-RUN go build -o service1 main.go
-RUN go build -o service2 main_2.go
-
-FROM alpine:latest
-WORKDIR /root/
-COPY --from=builder /app/service1 .
-COPY --from=builder /app/service2 .
-EXPOSE 8080 8081
-CMD ["sh", "-c", "./service1 & ./service2 & wait"]
-EOF
-                    
-                    echo "Dockerfile создан"
+                    echo "Результат: оба сервиса работают корректно"
                 '''
             }
         }
